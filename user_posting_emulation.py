@@ -1,8 +1,6 @@
 import requests
 from time import sleep
 import random
-from multiprocessing import Process
-import boto3
 import json
 import sqlalchemy
 from sqlalchemy import text
@@ -13,8 +11,25 @@ random.seed(100)
 
 
 class AWSDBConnector:
+    """
+    A class for connecting to a database using AWS credentials.
+
+    Attributes:
+        HOST (str): The database host address.
+        USER (str): The database username.
+        PASSWORD (str): The database password.
+        DATABASE (str): The name of the database.
+        PORT (int): The port number for the database connection.
+    """
 
     def __init__(self, credentials_path='db_creds.yaml'):
+        """
+        Initializes the AWSDBConnector class with database credentials.
+
+        Args:
+            credentials_path (str): Path to the YAML file containing database credentials.
+                                    Defaults to 'db_creds.yaml'.
+        """
         with open(credentials_path, 'r') as file:
             credentials = yaml.safe_load(file)
 
@@ -28,6 +43,12 @@ class AWSDBConnector:
 
     
     def create_db_connector(self):
+        """
+        Creates a SQLAlchemy database engine using the provided credentials.
+
+        Returns:
+            Engine: A SQLAlchemy database engine.
+        """
         engine = sqlalchemy.create_engine(
             f"mysql+pymysql://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DATABASE}?charset=utf8mb4")
         return engine
@@ -37,8 +58,12 @@ new_connector = AWSDBConnector()
 
 
 def run_infinite_post_data_loop():
+    """
+    A function to continuously post data to an API endpoint.
+    """
     headers = {'Content-Type': 'application/vnd.kafka.json.v2+json'}
-    
+
+    # Create an infinite loop for continuous data posting
     while True:
         sleep(random.randrange(0, 2))
         random_row = random.randint(0, 11000)
@@ -46,8 +71,11 @@ def run_infinite_post_data_loop():
         base_url = "https://amdpzoul4j.execute-api.us-east-1.amazonaws.com/test"
         topics = ["pin", "geo", "user"]
 
+        # Connect to the database 
         with engine.connect() as connection:
 
+            # Fetch random rows from the database
+            
             pin_string = text(f"SELECT * FROM pinterest_data LIMIT {random_row}, 1")
             pin_selected_row = connection.execute(pin_string)
             
@@ -67,6 +95,7 @@ def run_infinite_post_data_loop():
                 user_result = dict(row._mapping)
 
             
+            # Prepare JSON payloads for posting data to the API
             payload_pin = json.dumps({
                 "records": [
                     {
@@ -100,10 +129,12 @@ def run_infinite_post_data_loop():
                 ]
             })
 
-            
+
+            # Iterate over topics and post data to the API
             for topic in topics:
                 invoke_url = f"{base_url}/topics/12a3da8f7ced.{topic}"
 
+                # Select payload based on the topic 
                 if topic == "pin":
                     topic_data = payload_pin
                 elif topic == "geo":
@@ -111,8 +142,10 @@ def run_infinite_post_data_loop():
                 elif topic == "user":
                     topic_data = payload_user
 
+                # Make a HTTP POST request to the API
                 response = requests.request("POST", invoke_url, headers=headers, data=topic_data)
 
+                # Print status message based on the response 
                 if response.status_code == 200:
                     print(f"{topic.capitalize()} data posted successfully")
                 else:
